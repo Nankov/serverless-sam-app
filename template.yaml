@@ -1,0 +1,206 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  my-serverless-app
+
+  Sample SAM Template for my-serverless-app
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    Tracing: Active
+  Api:
+    TracingEnabled: true
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'content-type'"
+      AllowOrigin: "'*'"
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: hello-world/
+      Handler: app.lambdaHandler
+      Runtime: nodejs18.x
+      Layers:
+        - !Ref NodeJSLayer
+      Architectures:
+      - x86_64
+      Events:
+        PutInDB:
+          Type: Api
+          Properties:
+            Path: /
+            Method: post
+  IndexFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: hello-world/
+      Handler: index.lambdaHandler
+      Runtime: nodejs18.x
+      Layers:
+        - !Ref NodeJSLayer
+      Architectures:
+      - x86_64
+      Events:
+        onget:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+
+  IndexBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - Date
+            # Id: myCORSRuleId1
+            # MaxAge: 3600
+  NodeJSLayer:
+    Type: AWS::Serverless::LayerVersion  
+    Properties:
+        LayerName: sam-app-dependencies
+        Description: Node modules for my-sam-app
+        ContentUri: dependencies/
+        CompatibleRuntimes:
+            - nodejs18.x
+        RetentionPolicy: Retain
+      
+  ProcessStreamsFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: hello-world/
+      Handler: process_stream.lambdaHandler
+      Runtime: nodejs18.x
+      Layers:
+        - !Ref NodeJSLayer
+      Architectures:
+      - x86_64
+      Events:
+        PutInDB:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt DDBTable.StreamArn
+            BatchSize: 100
+            StartingPosition: TRIM_HORIZON 
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt 
+             - LambdaProcessSG
+             - GroupId
+        SubnetIds: 
+          - subnet-08bc82ebd14aed839
+  
+
+  LambdaProcessSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: vpc-059847c24eb898422
+      GroupDescription: Security group for Lambda Process Streams function
+
+  DDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: ID
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: ID
+          KeyType: HASH
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+  
+  SourceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: vpc-059847c24eb898422
+      GroupDescription: Sample source security group
+  TargetSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: vpc-059847c24eb898422
+      GroupDescription: Sample target security group
+  OutboundRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 6379
+      DestinationSecurityGroupId:
+        Fn::GetAtt:
+          - TargetSG
+          - GroupId
+      GroupId:
+        Fn::GetAtt:
+          - SourceSG
+          - GroupId
+  InboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      CidrIp: 0.0.0.0/0
+      GroupId:
+        Fn::GetAtt:
+          - TargetSG
+          - GroupId
+
+  ElasticacheCluster:
+    Type: 'AWS::ElastiCache::CacheCluster'
+    Properties:    
+      Engine: redis
+      CacheNodeType: cache.t2.micro
+      NumCacheNodes: 1
+      VpcSecurityGroupIds:
+      - !GetAtt 
+        - TargetSG
+        - GroupId
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Join:
+        - ''
+        - - ApplicationInsights-SAM-
+          - Ref: AWS::StackName
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Fn::Join:
+        - ''
+        - - ApplicationInsights-SAM-
+          - Ref: AWS::StackName
+      AutoConfigurationEnabled: 'true'
+    DependsOn: ApplicationResourceGroup
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  HelloWorldApi:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  HelloWorldFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt HelloWorldFunction.Arn
+  HelloWorldFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value: !GetAtt HelloWorldFunctionRole.Arn

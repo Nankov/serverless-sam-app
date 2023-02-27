@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <h1>hello</h1>
+    <span>ID:</span>
+    <input id="ID" name="ID" />
+    <hr>
+    <span>Text:</span>
+    <input id="Text" name="Text" />
+    <hr>
+    <button onclick='post()'>Submit</button>
+
+</body>
+<script>
+    function post() {
+
+        const data = {
+            "ID": document.getElementById("ID").value,
+            "Text": document.getElementById("Text").value
+        }
+
+        console.log(data)
+        fetch("https://9miq0n2dsh.execute-api.eu-central-1.amazonaws.com/Prod/", {
+            method: 'POST', 
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        }).then(data => console.log(data))
+    }
+</script>
+
+</html>

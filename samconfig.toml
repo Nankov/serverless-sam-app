@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "my-serverless-app"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1i2lebe0gv51x"
+s3_prefix = "my-serverless-app"
+region = "eu-central-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+disable_rollback = false
+image_repositories = []
